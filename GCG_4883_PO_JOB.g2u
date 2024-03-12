@@ -1,0 +1,53 @@
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'BN, Feb 1, 2018
+'This project will generate a report when user clicks the Script 1 button on the PO header screen.
+'The report will display data of the PO relating to its Job & Project
+F.Intrinsic.Control.SetErrorHandler("Main")
+F.Intrinsic.Control.ClearErrors
+v.Local..BulkDeclareString(sError,sSQL,sPO,sVal,sVendor,sVendorName)
+v.Local..BulkDeclareLong(iBIRunID,iBILogID,iRptID)
+
+F.odbc.Connection!con.OpenConnection(V.Ambient.PDSN,V.Ambient.PUser,V.Ambient.PPass,600)
+
+F.Intrinsic.Control.SelectCase(v.Caller.Hook)
+	'Populate hook Purchasing > File > Purchase Orders (Manual) > Open/New/View
+	F.Intrinsic.Control.Case(16850)		
+		Variable.Passed.000065.Set("PO Report")
+		
+	'Script 1 button hook Purchasing > File > Purchase Orders (Manual) > Open/New/View	
+	F.Intrinsic.Control.Case(16890)			
+		f.Intrinsic.Control.If(Variable.Passed.000008,=,"")
+			f.Intrinsic.UI.Msgbox("Please select a Purchase Order","No PO selected")
+			f.Intrinsic.Control.ExitSub
+		f.Intrinsic.Control.EndIf
+		
+		f.Intrinsic.String.LPad(Variable.Passed.000008,"0",7,v.Local.sPO)
+		v.Local.sVendor.Set(Variable.Passed.000011)
+		v.Local.sVendorName.Set(Variable.Passed.000012)	
+		f.Intrinsic.String.Build("SELECT p.RECORD_NO AS LineNo,p.PART AS PartNo,p.job + '-' + p.suffix as JobNo,j.Project,p.Extension,p.qty_order as QtyOrder,p.qty_order - p.qty_received - p.qty_recd_not_insp as QtyOpen, p.qty_received as QtyRec,p.qty_recd_not_insp as QtyRecNotInsp,p.Description as Descr,rtrim(j.comments_1)+ '-' + rtrim(j.comments_2)+ '-' + rtrim(j.comments_3) as JobDescr FROM V_PO_lines p Left Join v_job_header j On p.job = j.job And p.suffix = j.suffix Where p.PURCHASE_ORDER = '{0}'",v.Local.sPO,v.Local.sSQL) 
+		f.Data.DataTable.CreateFromSQL("D","con",v.Local.sSQL,True)
+		f.ODBC.Connection!con.Execute("Delete from GCG_4883_PO_Job")
+		f.Data.DataTable.SaveToDB("D","con","GCG_4883_PO_JOB","",128)
+		'Run report
+		F.Global.BI.GetRunID(V.local.iBIRunID)
+		f.Global.BI.GetIDFromName("GCG_4883_PO_JOB.rpt",True,v.Local.iRptID)		
+		F.Global.BI.StartLogging(V.Local.iBIRunID,v.Local.iRptID,-1,"",V.Local.iBILogID)
+		F.Global.BI.StopLogging(V.Local.iBILogID)
+		f.Intrinsic.String.Build("{0}*!*{1}*!*{2}",v.Local.sPO,v.Local.sVendor,v.Local.sVendorName,v.Local.sVal)
+		F.Global.BI.RunReportPreProcessor(V.Local.iBIRunID,V.Local.iBILogID,"PONum*!*Vendor*!*VendorName",V.Local.sVal,"",-1,True,"",-1,"",-1,"","",V.Local.iBIRunID)
+	
+F.Intrinsic.Control.EndSelect
+
+f.ODBC.Connection!con.Close
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: Project",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.Main.End
